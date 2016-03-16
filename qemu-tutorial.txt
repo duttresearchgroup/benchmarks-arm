@@ -1,0 +1,45 @@
+####################################
+Instructions on how to successfully setup qemu to emulate an arm vexpress a9/a15 board (and possibly any other arm hw that qemu emulates)
+
+The goal is to generate a disk image and use it with user-level qemu + chroot
+to compile/test benchmarks
+####################################
+
+1) setup the rootfs
+
+sudo apt-get install qemu-user-static qemu-system-arm
+
+# 4GBs should be enough
+#dd if=/dev/zero of=./benchmarks.img bs=4M count=1024
+# but using 12 GB to make room for all the benchmarks (specially parsec)
+dd if=/dev/zero of=./benchmarks.img bs=4M count=3072
+sudo losetup -f ./benchmarks.img
+sudo mkfs.ext4 /dev/loop0
+mkdir benchmarks.imgmount
+sudo mount /dev/loop0 benchmarks.imgmount
+
+# let's bootstrap a trusty armhf rootfs in the qemu-img directory
+sudo qemu-debootstrap --arch=armhf trusty benchmarks.imgmount
+sudo cp `which qemu-arm-static` benchmarks.imgmount/usr/bin/
+
+# setup serial console, apt repositories and network
+sudo chroot benchmarks.imgmount
+sed 's/tty1/ttyAMA0/g' /etc/init/tty1.conf > /etc/init/ttyAMA0.conf
+echo "deb  http://ports.ubuntu.com trusty main restricted multiverse universe" > /etc/apt/sources.list
+apt-get update
+echo -e "\nauto eth0\niface eth0 inet dhcp" >> /etc/network/interfaces
+
+# root password (e.g. drg)
+passwd
+
+2) (still from chroot; optional if you don't want to boot from this image) pick and install a kernel
+
+pick a kernel that suites your need (e.g. 3.10.0-6.17), download and install it:
+
+apt-get install wget ca-certificates
+wget https://launchpad.net/ubuntu/+archive/primary/+files/linux-image-3.10.0-6-generic-lpae_3.10.0-6.17_armhf.deb
+dpkg -i linux-image-3.10.0-6-generic-lpae_3.10.0-6.17_armhf.deb
+
+# press CTRL+D to exit the chroot (or go do your stuff)
+^D
+
