@@ -1,1 +1,1 @@
-sudo chroot benchmarks.imgmount
+sudo chroot benchmarks.chroot

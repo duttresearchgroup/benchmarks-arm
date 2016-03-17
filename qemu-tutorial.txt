@@ -5,9 +5,11 @@ The goal is to generate a disk image and use it with user-level qemu + chroot
 to compile/test benchmarks
 ####################################
 
-1) setup the rootfs
+1) qemu install
 
 sudo apt-get install qemu-user-static qemu-system-arm
+
+2) create image (optional; if you don't want to a boot image just create an empty directory for chroot)
 
 # 4GBs should be enough
 #dd if=/dev/zero of=./benchmarks.img bs=4M count=1024
@@ -17,6 +19,8 @@ sudo losetup -f ./benchmarks.img
 sudo mkfs.ext4 /dev/loop0
 mkdir benchmarks.imgmount
 sudo mount /dev/loop0 benchmarks.imgmount
+
+3) setup the rootfs
 
 # let's bootstrap a trusty armhf rootfs in the qemu-img directory
 sudo qemu-debootstrap --arch=armhf trusty benchmarks.imgmount
@@ -32,7 +36,7 @@ echo -e "\nauto eth0\niface eth0 inet dhcp" >> /etc/network/interfaces
 # root password (e.g. drg)
 passwd
 
-2) (still from chroot; optional if you don't want to boot from this image) pick and install a kernel
+4) (still from chroot; optional if you don't want to boot from this image) pick and install a kernel
 
 pick a kernel that suites your need (e.g. 3.10.0-6.17), download and install it:
 

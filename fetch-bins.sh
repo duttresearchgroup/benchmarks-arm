@@ -2,7 +2,7 @@
 read -p "HPC user: " USER
 #read -s -p "Password: " PASSWORD
 
-TGTDIR="/dfs1/drg/tmuck/shared_data/benchmarks_arm/*"
+TGTDIR="/dfs1/drg/tmuck/shared_data/benchmarks_arm/benchmarks"
 
 #get a list of files to be updated
 #  call rsynch
