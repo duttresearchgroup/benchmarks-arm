@@ -76,8 +76,8 @@ static int* center_table; //index table of centers
 static int nproc; //# of threads
 
 static bool beats_en;  //if heartbeats are enabled
-static task_beat_info_t *_vitamins_info = 0;
-static task_beat_data_t *_vitamins_beats = 0;
+static task_beat_info_t *g_vitamins_info = 0;
+static task_beat_data_t *g_vitamins_beats = 0;
 
 
 #ifdef TBB_VERSION
@@ -1212,7 +1212,8 @@ float pFL(Points *points, int *feasible, int numfeasible,
 #else //!TBB_VERSION
  float pFL(Points *points, int *feasible, int numfeasible,
 	  float z, long *k, double cost, long iter, float e, 
-	  int pid, pthread_barrier_t* barrier)
+	  int pid, pthread_barrier_t* barrier,
+          task_beat_data_t *t_vitamins_beats)
 {
 #ifdef ENABLE_THREADS
   pthread_barrier_wait(barrier);
@@ -1239,8 +1240,11 @@ float pFL(Points *points, int *feasible, int numfeasible,
     for (i=0;i<iter;i++) {
       x = i%numfeasible;
       change += pgain(feasible[x], points, z, k, pid, barrier);
-      if (_vitamins_beats) {
-        task_beat(_vitamins_beats);
+      if (g_vitamins_beats) {
+        task_beat(g_vitamins_beats);
+      }
+      if (t_vitamins_beats) {
+        task_beat(t_vitamins_beats);
       }
     }
     cost -= change;
@@ -1485,7 +1489,8 @@ float pkmedian(Points *points, long kmin, long kmax, long* kfinal,
 
 /* compute approximate kmedian on the points */
 float pkmedian(Points *points, long kmin, long kmax, long* kfinal,
-	       int pid, pthread_barrier_t* barrier )
+	       int pid, pthread_barrier_t* barrier,
+               task_beat_data_t *t_vitamins_beats )
 {
   int i;
   double cost;
@@ -1582,7 +1587,8 @@ float pkmedian(Points *points, long kmin, long kmax, long* kfinal,
     /* first get a rough estimate on the FL solution */
     lastcost = cost;
     cost = pFL(points, feasible, numfeasible,
-	       z, &k, cost, (long)(ITER*kmax*log((double)kmax)), 0.1, pid, barrier);
+	       z, &k, cost, (long)(ITER*kmax*log((double)kmax)), 0.1, pid, barrier,
+               t_vitamins_beats);
 
     /* if number of centers seems good, try a more accurate FL */
     if (((k <= (1.1)*kmax)&&(k >= (0.9)*kmin))||
@@ -1591,7 +1597,8 @@ float pkmedian(Points *points, long kmin, long kmax, long* kfinal,
       /* may need to run a little longer here before halting without
 	 improvement */
       cost = pFL(points, feasible, numfeasible,
-		 z, &k, cost, (long)(ITER*kmax*log((double)kmax)), 0.001, pid, barrier);
+		 z, &k, cost, (long)(ITER*kmax*log((double)kmax)), 0.001, pid, barrier,
+                 t_vitamins_beats);
     }
 
     if (k > kmax) {
@@ -1698,8 +1705,30 @@ struct pkmedian_arg_t
 
 void* localSearchSub(void* arg_) {
 
+  task_beat_info_t *t_vitamins_info = 0;
+  task_beat_data_t *t_vitamins_beats = 0;
+  if (beats_en) {
+    t_vitamins_info = task_beat_register_task();
+    if(t_vitamins_info){
+        t_vitamins_beats = task_beat_create_domain(t_vitamins_info,BEAT_PERF,0);
+        if(!t_vitamins_beats)
+            fprintf( stderr, "(t%d) Cannot setup beats!\n", ((pkmedian_arg_t*)arg_)->pid);
+        else {
+            fprintf( stderr, "(t%d) Beats setup\n", ((pkmedian_arg_t*)arg_)->pid);
+        }
+    }   
+    else {
+       fprintf( stderr, "(t%d) Cannot use connect to beats sensing module!\n", ((pkmedian_arg_t*)arg_)->pid);
+    }  
+  } else fprintf( stderr, "W8 Y\n");
   pkmedian_arg_t* arg= (pkmedian_arg_t*)arg_;
-  pkmedian(arg->points,arg->kmin,arg->kmax,arg->kfinal,arg->pid,arg->barrier);
+  pkmedian(arg->points,arg->kmin,arg->kmax,arg->kfinal,arg->pid,arg->barrier,
+    t_vitamins_beats);
+
+  if(t_vitamins_beats && t_vitamins_info) {
+    fprintf(stderr, "(t%d) Beats: %llu beats, rate = %f beats/s\n",((pkmedian_arg_t*)arg_)->pid,
+      task_beat_read_total(t_vitamins_beats),task_beat_read_total_rate(t_vitamins_info,t_vitamins_beats));
+  }
 
   return NULL;
 }
@@ -1925,9 +1954,9 @@ void streamCluster( PStream* stream,
     localSearch(&points,kmin, kmax,&kfinal); // parallel
 
     //fprintf(stderr,"finish local search\n");
-    if(_vitamins_beats && _vitamins_info) {
+    if(g_vitamins_beats && g_vitamins_info) {
       fprintf(stderr, "Beats: %llu beats, rate = %f beats/s\n",
-        task_beat_read_total(_vitamins_beats),task_beat_read_total_rate(_vitamins_info,_vitamins_beats));
+        task_beat_read_total(g_vitamins_beats),task_beat_read_total_rate(g_vitamins_info,g_vitamins_beats));
     }
     contcenters(&points); /* sequential */
     if( kfinal + centers.num > centersize ) {
@@ -2041,10 +2070,10 @@ int main(int argc, char **argv)
   }
 
   if (beats_en) {
-    _vitamins_info = task_beat_register_task();
-    if(_vitamins_info){
-        _vitamins_beats = task_beat_create_domain(_vitamins_info,BEAT_PERF,0);
-        if(!_vitamins_beats)
+    g_vitamins_info = task_beat_register_task();
+    if(g_vitamins_info){
+        g_vitamins_beats = task_beat_create_domain(g_vitamins_info,BEAT_PERF,0);
+        if(!g_vitamins_beats)
             fprintf( stderr, "Cannot setup beats!\n");
         else {
             fprintf( stderr, "Beats setup\n");
@@ -2065,9 +2094,9 @@ int main(int argc, char **argv)
   __parsec_roi_end();
 #endif
 
-  if(_vitamins_beats && _vitamins_info) {
+  if(g_vitamins_beats && g_vitamins_info) {
     fprintf(stderr, "Beats: %llu beats, rate = %f beats/s\n",
-      task_beat_read_total(_vitamins_beats),task_beat_read_total_rate(_vitamins_info,_vitamins_beats));
+      task_beat_read_total(g_vitamins_beats),task_beat_read_total_rate(g_vitamins_info,g_vitamins_beats));
   }
 
   delete stream;

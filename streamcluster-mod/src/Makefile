@@ -5,8 +5,8 @@ PREFIX=${PARSECDIR}/pkgs/kernels/streamcluster/inst/${PARSECPLAT}
 TARGET=streamcluster
 OBJS=streamcluster.o
 
-CXXFLAGS := -std=c++11 $(CXXFLAGS)
-CXXFLAGS := $(CXXFLAGS) -I/mash/src 
+#CXXFLAGS := -std=c++11 $(CXXFLAGS)
+#CXXFLAGS := $(CXXFLAGS) -I/mash/src 
 
 ifdef version
   ifeq "$(version)" "pthreads"
