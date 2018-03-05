@@ -1,0 +1,9 @@
+-Run every application with 
+	> make
+	> ./exec 
+	
+-Every application has a main compute kernel, I commented where hb API can be annotated.
+ This way, you measure the appropriate performance.
+-Every application has a random data generation call with parameterizable input data sizes. Tune them to get 
+ a desired performance suitable for your experiments. 
+ 
